@@ -7,7 +7,7 @@ from datetime import datetime
 st.set_page_config(page_title="Stock Hunter", page_icon="📈")
 
 
-st.title("Stock Hunter Pro")
+st.title("Stock Hunter")
 st.caption("ระบบค้นหาแนวรับเชิงกลยุทธ์ (Price Action & Fractal)")
 
 
@@ -120,6 +120,7 @@ if st.button("🚀 เริ่มวิเคราะห์", type="primary"):
     analyze_stock(symbol_input)
 else:
     st.write("กดปุ่มเพื่อเริ่มคำนวณครับ")
+
 
 
 
