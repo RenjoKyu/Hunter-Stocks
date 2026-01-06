@@ -111,85 +111,51 @@ st.markdown("""
         font-family: 'Prompt', sans-serif;
         text-align: justify;
     }
-    
-    /* Input Field */
-    .stTextInput input {
-        font-family: 'JetBrains Mono', monospace;
-        text-transform: uppercase;
-        font-weight: bold;
-    }
 </style>
 """, unsafe_allow_html=True)
-
-# -----------------------------------------------------------
-# Sidebar
-with st.sidebar:
-    st.markdown("### ตั้งค่าระบบ")
-    
-    symbol_input = st.text_input("ระบุชื่อย่อหุ้น (Ticker)", value="NVDA").upper()
-    
-    # Default Timeframe = 5y
-    period_input = st.selectbox("ระยะเวลาย้อนหลัง", ["1y", "2y", "5y", "10y"], index=2)
-    
-    st.markdown("---")
-    st.markdown("""
-    <div style='font-size: 12px; color: #666; font-family: "Prompt";'>
-    ตลาด: หุ้นสหรัฐฯ (NASDAQ/NYSE)<br>
-    สกุลเงิน: ดอลลาร์สหรัฐ (USD)<br>
-    สถานะ: พร้อมใช้งาน
-    </div>
-    """, unsafe_allow_html=True)
-    
-    analyze_btn = st.button("เริ่มการวิเคราะห์", type="primary", use_container_width=True)
 
 # -----------------------------------------------------------
 # Logic Functions
 def get_us_stock_data(symbol, period):
     ticker = yf.Ticker(symbol)
     try:
-        # 1. Fetch History first (Most robust check if stock exists)
+        # 1. ดึง History เพื่อเช็คว่าหุ้นมีตัวตนหรือไม่
         df = ticker.history(period=period, interval="1wk")
         
         if df.empty:
-            return None, None, "ไม่พบข้อมูล (History Empty)", None
+            return None, None, "ไม่พบข้อมูลหุ้นตัวนี้", None
 
-        # 2. Get Info & Price using fast_info (More reliable for price)
+        # 2. ดึงราคาและสกุลเงิน (ใช้ fast_info ก่อนเพื่อความเร็ว)
         try:
-            # fast_info is newer and faster
             currency = ticker.fast_info.currency
             current_price = ticker.fast_info.last_price
         except:
-            # Fallback to .info if fast_info fails
+            # Fallback หาก fast_info มีปัญหา
             info = ticker.info
             currency = info.get('currency', 'Unknown')
-            current_price = info.get('currentPrice', info.get('regularMarketPrice', df['Close'].iloc[-1]))
+            current_price = info.get('currentPrice') or info.get('regularMarketPrice') or df['Close'].iloc[-1]
 
-        # 3. Filter US Only
+        # 3. กรองเฉพาะหุ้นสหรัฐฯ (USD)
         if currency != 'USD':
             if currency == 'Unknown' and '.' not in symbol:
                 currency = 'USD'
             else:
-                return None, None, f"ไม่ใช่หุ้นสหรัฐฯ (ตรวจพบสกุลเงิน: {currency})", None
+                return None, None, f"ระบบรองรับเฉพาะหุ้นสหรัฐฯ (พบ: {currency})", None
 
-        # 4. Fetch Full Name (Robust Method)
-        # -----------------------------------------------------------
-        # ส่วนที่แก้ไข: เพิ่ม Logic การดึงชื่อเต็มให้รัดกุมขึ้น
+        # 4. ส่วนสำคัญ: ดึงชื่อเต็ม (ใช้ Logic 'or' เพื่อป้องกันค่า None)
         try:
-            stock_info = ticker.info
-            # พยายามดึง longName -> shortName -> symbol ตามลำดับ
-            full_name = stock_info.get('longName', stock_info.get('shortName', symbol))
-        except Exception:
-            # กรณีเชื่อมต่อดึง Info ไม่ได้ ให้ใช้ Symbol แทน
+            full_name = ticker.info.get('longName') or ticker.info.get('shortName') or symbol
+        except:
             full_name = symbol
-        # -----------------------------------------------------------
 
         return df, full_name, currency, current_price
 
     except Exception as e:
-        return None, None, f"Error: {str(e)}", None
+        return None, None, f"ข้อผิดพลาด: {str(e)}", None
 
 def calculate_fractal_levels(df):
     levels = []
+    # Logic หาแนวรับแบบ Fractal
     for i in range(2, len(df)-2):
         low_val = df['Low'].iloc[i]
         if low_val < df['Low'].iloc[i-1] and low_val < df['Low'].iloc[i-2] and \
@@ -213,124 +179,87 @@ def calculate_fractal_levels(df):
     return consolidated
 
 # -----------------------------------------------------------
-# Main Execution
+# Sidebar UI
+with st.sidebar:
+    st.markdown("### ตั้งค่าระบบ")
+    symbol_input = st.text_input("ระบุชื่อย่อหุ้น (Ticker)", value="NVDA").upper()
+    period_input = st.selectbox("ระยะเวลาย้อนหลัง", ["1y", "2y", "5y", "10y"], index=2)
+    st.markdown("---")
+    st.markdown("""
+    <div style='font-size: 12px; color: #666; font-family: "Prompt";'>
+    ตลาด: US Stock Market<br>
+    แหล่งข้อมูล: Yahoo Finance
+    </div>
+    """, unsafe_allow_html=True)
+    analyze_btn = st.button("เริ่มการวิเคราะห์", type="primary", use_container_width=True)
 
-# Header Section
+# -----------------------------------------------------------
+# Main Execution UI
 st.markdown(f"<h2 style='margin-bottom: 0;'>STOCK HUNTER <span style='color:#4CAF50; font-size:20px; font-weight:300;'>/ US</span></h2>", unsafe_allow_html=True)
-st.markdown(f"<p style='color:#666; font-size:12px; font-family:monospace;'>แหล่งข้อมูล: YAHOO FINANCE | วันที่: {datetime.now().strftime('%d/%m/%Y')}</p>", unsafe_allow_html=True)
+st.markdown(f"<p style='color:#666; font-size:12px; font-family:monospace;'>UPDATE: {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>", unsafe_allow_html=True)
 st.markdown("---")
 
 if analyze_btn or symbol_input:
-    with st.spinner("กำลังประมวลผลข้อมูล..."):
-        # Unpack result
-        result = get_us_stock_data(symbol_input, period_input)
+    with st.spinner("กำลังดึงข้อมูลจากตลาด..."):
+        df, full_name, currency, current_price = get_us_stock_data(symbol_input, period_input)
         
-        # Check Error
-        if result[0] is None:
-            error_msg = result[2]
-            if "ไม่ใช่หุ้นสหรัฐฯ" in str(error_msg):
-                st.error(f"ระบบแจ้งเตือน: {error_msg}")
-            elif "ไม่พบข้อมูล" in str(error_msg):
-                st.error(f"ไม่พบข้อมูล: '{symbol_input}' กรุณาตรวจสอบตัวสะกด")
-            else:
-                st.error(f"เกิดข้อผิดพลาด: {error_msg}")
+        if df is None:
+            # full_name ในที่นี้จะกลายเป็น error_msg จากการ unpack
+            st.error(f"{currency}") 
         else:
-            # Case Success
-            df, full_name, currency, current_price = result
-
-            # คำนวณ High/Low 52 สัปดาห์
-            one_year_high = df['High'].tail(52).max()
-            one_year_low = df['Low'].tail(52).min()
-            
-            # --- Display Company Name Header ---
+            # แสดงชื่อบริษัทเต็มๆ
             st.markdown(f"""
             <div>
                 <div class='company-name'>{full_name}</div>
-                <div class='ticker-sub'>{symbol_input} • NASDAQ/NYSE</div>
+                <div class='ticker-sub'>{symbol_input} • USD</div>
             </div>
             """, unsafe_allow_html=True)
 
-            # --- Metrics ---
+            # แสดง Metrics
+            one_year_high = df['High'].tail(52).max()
+            one_year_low = df['Low'].tail(52).min()
+            
             c1, c2, c3 = st.columns(3)
-            c1.metric("ราคาปัจจุบัน (USD)", f"${current_price:,.2f}") 
+            c1.metric("ราคาปัจจุบัน", f"${current_price:,.2f}") 
             c2.metric("สูงสุด 52 สัปดาห์", f"${one_year_high:,.2f}")
             c3.metric("ต่ำสุด 52 สัปดาห์", f"${one_year_low:,.2f}")
             
             st.markdown("---")
 
-            # --- Analysis Section ---
+            # แผนกลยุทธ์
+            st.markdown("### แผนกลยุทธ์การลงทุน")
             raw_levels = calculate_fractal_levels(df)
-            waiting_levels = [l for l in raw_levels if l[0] < current_price]
-            waiting_levels.sort(key=lambda x: x[0], reverse=True)
+            waiting_levels = sorted([l for l in raw_levels if l[0] < current_price], key=lambda x: x[0], reverse=True)
             top_3 = waiting_levels[:3]
 
-            st.markdown("### แผนกลยุทธ์การลงทุน")
-            
             if not top_3:
-                st.markdown("""
-                <div class="custom-alert">
-                    <b>สถานะ: ทำจุดสูงสุดใหม่ (All Time High)</b><br>
-                    ราคากำลังทำจุดสูงสุดใหม่ ไม่พบแนวรับที่มีนัยสำคัญในระยะใกล้<br>
-                    คำแนะนำ: รอให้ราคาพักตัวสร้างฐาน (Base Formation) ก่อนพิจารณาลงทุน
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown('<div class="custom-alert"><b>สถานะ: Bullish</b><br>หุ้นกำลังทำ All Time High หรือไม่พบแนวรับใกล้เคียง</div>', unsafe_allow_html=True)
             else:
                 total_strength = sum(l[1] for l in top_3)
-                
-                # Cards
                 for i, (price, count) in enumerate(top_3):
                     weight = round((count / total_strength) * 100)
-                    
-                    # คำนวณ % ห่างจากราคาปัจจุบัน
-                    dist_from_curr = ((price - current_price) / current_price) * 100
-                    
-                    # คำนวณ % ห่างจากจุดสูงสุด (52 Week High)
-                    dist_from_high = ((price - one_year_high) / one_year_high) * 100
+                    dist_curr = ((price - current_price) / current_price) * 100
+                    dist_high = ((price - one_year_high) / one_year_high) * 100
                     
                     st.markdown(f"""
                     <div class="strategy-card">
                         <div class="strategy-head">
                             <span class="zone-label">ไม้ที่ {i+1}</span>
-                            <span class="weight-label">น้ำหนัก {weight}%</span>
+                            <span class="weight-label">สัดส่วน {weight}%</span>
                         </div>
                         <div class="price-large">${price:,.2f}</div>
                         <div style="margin-top: 15px; border-top: 1px solid #333; padding-top: 15px;">
                             <div style="display:flex; justify-content:space-between; color:#bbb; font-size:13px; font-family:'Prompt';">
-                                <span>ห่างจากราคาปัจจุบัน: {dist_from_curr:.2f}%</span>
-                                <span>ห่างจากจุดสูงสุด: {dist_from_high:.2f}%</span>
+                                <span>ห่างจากราคาปัจจุบัน: {dist_curr:.2f}%</span>
+                                <span>ห่างจากจุดสูงสุด: {dist_high:.2f}%</span>
                             </div>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
 
-# Legal Disclaimer Section (Footer) 
+# Footer
 st.markdown("""
-<style>
-    .legal-footer {
-        margin-top: 80px;
-        padding: 30px;
-        border-top: 1px solid #262626;
-        color: #555;
-        font-size: 11.5px;
-        line-height: 1.8;
-        text-align: justify;
-        font-family: 'Prompt', sans-serif;
-    }
-    .legal-footer b {
-        color: #777;
-        letter-spacing: 0.5px;
-    }
-</style>
-
 <div class="legal-footer">
-    <b>ข้อจำกัดความรับผิดและคำเตือน (DISCLAIMER):</b><br>
-    ข้อมูล บทวิเคราะห์ และแผนกลยุทธ์ที่แสดงผลในระบบนี้ เป็นเพียงผลลัพธ์จากการคำนวณทางสถิติและคณิตศาสตร์จากข้อมูลราคาในอดีต (Technical Analysis) เท่านั้น 
-    มุ่งเน้นเพื่อเป็นเครื่องมือประกอบการศึกษาทฤษฎีกราฟ <u>มิใช่คำแนะนำทางการเงิน (Financial Advice)</u> 
-    มิใช่การชักชวนหรือชี้นำให้ซื้อขายหลักทรัพย์ และไม่ได้รับประกันผลตอบแทนในอนาคต 
-    <br><br>
-    การลงทุนในตลาดหลักทรัพย์ต่างประเทศมีความเสี่ยงสูงจากความผันผวนของราคาและอัตราแลกเปลี่ยน 
-    ผู้ใช้งานควรศึกษาข้อมูลเชิงลึกเพิ่มเติมจากหลายแหล่งและใช้วิจารณญาณในการตัดสินใจลงทุนด้วยตนเองอย่างรอบคอบ 
-    โดยผู้พัฒนาระบบจะไม่รับผิดชอบต่อความเสียหาย หรือการขาดทุนใดๆ ที่เกิดขึ้นจากการนำข้อมูลนี้ไปใช้งานในทุกกรณี
+    <b>DISCLAIMER:</b> ข้อมูลนี้เป็นเพียงการวิเคราะห์ทางสถิติ มิใช่คำแนะนำทางการเงิน ผู้ลงทุนควรตัดสินใจด้วยตนเอง
 </div>
-
 """, unsafe_allow_html=True)
